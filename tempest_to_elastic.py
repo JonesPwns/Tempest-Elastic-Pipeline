@@ -1,43 +1,29 @@
 import socket
 import json
-from elasticsearch import Elasticsearch
-from datetime import datetime
 
-# Configure Elasticsearch client
-es = Elasticsearch(["http://localhost:9200"])
-index_name = "tempest-weather"
-
-# UDP listener configuration
-UDP_IP = "0.0.0.0"
-UDP_PORT = 50222
-
-# Create a socket to listen for UDP packets
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind((UDP_IP, UDP_PORT))
+# Configure UDP listener
+UDP_IP = "0.0.0.0"  # Listen on all available network interfaces
+UDP_PORT = 50222    # Tempest Weather Station broadcast port
 
 print(f"Listening for Tempest weather data on {UDP_IP}:{UDP_PORT}...")
 
-while True:
-    try:
-        # Receive data from the weather station
-        data, addr = sock.recvfrom(1024)
-        decoded_data = data.decode('utf-8')
+# Create a UDP socket
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind((UDP_IP, UDP_PORT))
 
-        # Parse the JSON log from the Tempest weather station
-        weather_data = json.loads(decoded_data)
-
-        # Enrich with a timestamp if not present
-        if "timestamp" not in weather_data:
-            weather_data["timestamp"] = datetime.utcnow().isoformat()
-
-        # Index the data into Elasticsearch
-        response = es.index(index=index_name, document=weather_data)
-
-        # Log success to the console
-        print(f"Data indexed to Elasticsearch: {response['result']}")
-
-    except json.JSONDecodeError:
-        print("Received malformed JSON data.")
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
+try:
+    while True:
+        # Receive data from the Tempest Weather Station
+        data, addr = sock.recvfrom(1024)  # Buffer size is 1024 bytes
+        print(f"Received message from {addr}: {data.decode('utf-8')}")
+        
+        # Attempt to parse the data as JSON
+        try:
+            weather_data = json.loads(data.decode("utf-8"))
+            print(f"Parsed Weather Data: {json.dumps(weather_data, indent=4)}")
+        except json.JSONDecodeError:
+            print("Failed to parse message as JSON.")
+except KeyboardInterrupt:
+    print("\nExiting...")
+finally:
+    sock.close()
